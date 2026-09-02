@@ -18,7 +18,7 @@ from supplyguard.core.scoring import finding_risk
 from supplyguard.core.types import SEVERITY_ORDER, ScanStatus
 from supplyguard.db.models import Dependency, Finding, Project, Scan
 from supplyguard.detectors.base import DetectorConfig
-from supplyguard.scanner import ScanRequest, ScanResult, Scanner
+from supplyguard.scanner import Scanner, ScanRequest, ScanResult
 from supplyguard.utils.dates import utcnow
 
 logger = logging.getLogger(__name__)

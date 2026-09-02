@@ -12,8 +12,8 @@ from supplyguard.clients.cache import build_cache
 from supplyguard.clients.github import GitHubClient, GitHubError, parse_repository_url
 from supplyguard.clients.http import HttpClient
 from supplyguard.config import get_settings
-from supplyguard.db.models import CiEvent
 from supplyguard.core.types import SEVERITY_ORDER, Severity
+from supplyguard.db.models import CiEvent
 
 router = APIRouter(prefix="/projects/{project_id}/ci", tags=["ci"])
 

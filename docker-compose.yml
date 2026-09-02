@@ -1,0 +1,79 @@
+# SupplyGuard: `docker compose up --build`, then open http://localhost:8000
+#
+# The dashboard is served by the API container, so there is one URL and no CORS
+# configuration to get wrong. The worker runs as a separate service because
+# that is the shape a real deployment takes — scans scale independently of the
+# API — but the API also falls back to running scans in-process if the worker
+# is not up, so the stack is usable even when Redis is unavailable.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: supplyguard
+      POSTGRES_PASSWORD: supplyguard
+      POSTGRES_DB: supplyguard
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U supplyguard"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Not published by default: nothing outside the compose network needs it.
+    expose:
+      - "5432"
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    expose:
+      - "6379"
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://supplyguard:supplyguard@postgres:5432/supplyguard
+      REDIS_URL: redis://redis:6379/0
+      # Override in any real deployment; the app logs a warning if this is
+      # still the default while ENVIRONMENT=production.
+      JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-me}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      # Optional: raises the GitHub API limit from 60 to 5,000 requests/hour
+      # and enables private-repository and CI monitoring.
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      CORS_ORIGINS: http://localhost:8000,http://localhost:5173
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn supplyguard.api.app:app --host 0.0.0.0 --port 8000"
+
+  worker:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+asyncpg://supplyguard:supplyguard@postgres:5432/supplyguard
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-me}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    command: ["arq", "supplyguard.jobs.queue.WorkerSettings"]
+
+volumes:
+  postgres-data:

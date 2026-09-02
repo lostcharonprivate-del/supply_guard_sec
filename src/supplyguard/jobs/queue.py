@@ -66,7 +66,7 @@ async def enqueue_scan(
     github_token: str | None = None,
 ) -> str:
     """Queue a scan. Returns the execution path taken: 'queue' or 'inline'."""
-    kwargs = {
+    kwargs: dict[str, Any] = {
         "files": files,
         "repository_url": repository_url,
         "ecosystems": ecosystems,

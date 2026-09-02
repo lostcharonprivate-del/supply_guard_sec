@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import json as jsonlib
-import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -19,8 +18,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.tree import Tree
 
-from supplyguard.core.types import FindingCategory, SEVERITY_ORDER, Severity
-from supplyguard.scanner import ScanRequest, ScanResult, Scanner
+from supplyguard.core.types import SEVERITY_ORDER, FindingCategory, Severity
+from supplyguard.scanner import Scanner, ScanRequest, ScanResult
 
 app = typer.Typer(
     name="supplyguard",
@@ -464,27 +463,41 @@ def _render_tree(result: ScanResult) -> None:
         for parent, child in eco.graph.edges:
             children.setdefault(parent, []).append(child)
 
-        def add(node_key: str, branch: Tree, depth: int, seen: set[str]) -> None:
-            if depth > 3 or node_key in seen:
-                return
-            seen = seen | {node_key}
-            name = node_key.rsplit("@", 1)[0]
-            hits = findings_by_package.get(name, [])
-            if hits:
-                worst = min(hits, key=lambda f: SEVERITY_ORDER.index(f.severity))
-                label = (
-                    f"[{SEVERITY_STYLES[worst.severity.value]}]{node_key}[/] "
-                    f"[dim]({len(hits)} finding(s))[/dim]"
-                )
-            else:
-                label = f"[dim]{node_key}[/dim]"
-            sub = branch.add(label)
-            for child in sorted(children.get(node_key, []))[:8]:
-                add(child, sub, depth + 1, seen)
-
         for package in sorted(eco.graph.direct, key=lambda p: p.name)[:20]:
-            add(package.key, tree, 0, set())
+            _add_tree_node(package.key, tree, 0, frozenset(), children, findings_by_package)
         console.print(tree)
+
+
+def _add_tree_node(
+    node_key: str,
+    branch: Tree,
+    depth: int,
+    seen: frozenset[str],
+    children: dict[str, list[str]],
+    findings_by_package: dict[str, list],
+) -> None:
+    """Render one tree node and its children.
+
+    Takes `children` as an argument rather than closing over it: a real npm tree
+    contains cycles through dev dependencies, so `seen` bounds the recursion,
+    and binding the adjacency map explicitly keeps the recursion independent of
+    whichever ecosystem the caller is currently iterating.
+    """
+    if depth > 3 or node_key in seen:
+        return
+    name = node_key.rsplit("@", 1)[0]
+    hits = findings_by_package.get(name, [])
+    if hits:
+        worst = min(hits, key=lambda f: SEVERITY_ORDER.index(f.severity))
+        label = (
+            f"[{SEVERITY_STYLES[worst.severity.value]}]{node_key}[/] "
+            f"[dim]({len(hits)} finding(s))[/dim]"
+        )
+    else:
+        label = f"[dim]{node_key}[/dim]"
+    sub = branch.add(label)
+    for child in sorted(children.get(node_key, []))[:8]:
+        _add_tree_node(child, sub, depth + 1, seen | {node_key}, children, findings_by_package)
 
 
 def _render_api_result(payload: dict, output_json: bool) -> None:

@@ -153,9 +153,9 @@ class NpmAdapter(EcosystemAdapter):
         # than how npm happened to hoist the package on disk.
         queue: deque[tuple[str, int, bool, str | None]] = deque()
         for dep_name, is_dev in direct.items():
-            path = resolve("", dep_name)
-            if path:
-                queue.append((path, 0, is_dev, None))
+            root_path = resolve("", dep_name)
+            if root_path:
+                queue.append((root_path, 0, is_dev, None))
 
         seen: dict[str, int] = {}
         while queue:

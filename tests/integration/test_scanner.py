@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from supplyguard.core.types import ScanStatus, SEVERITY_ORDER
-from supplyguard.scanner import ScanRequest, Scanner
+from supplyguard.core.types import SEVERITY_ORDER, ScanStatus
+from supplyguard.scanner import Scanner, ScanRequest
 from tests.conftest import load_fixture
 
 

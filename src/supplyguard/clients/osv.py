@@ -265,7 +265,8 @@ def _resolve_range(doc: dict, ref: PackageRef) -> tuple[str | None, str | None, 
     adapter = adapter_for_osv_ecosystem(ref.ecosystem)
     normalised = adapter.normalize_name(ref.name) if adapter else ref.name.lower()
 
-    def version_key(value: str) -> tuple | None:
+    def version_key(value: str | None) -> tuple | None:
+        """Sortable key for a version, or None when it cannot be compared."""
         if not adapter or not value:
             return None
         try:

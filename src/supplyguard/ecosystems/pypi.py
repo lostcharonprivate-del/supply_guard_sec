@@ -6,6 +6,7 @@ import json
 import re
 import tomllib
 from collections import deque
+from datetime import datetime
 from typing import Any, ClassVar
 
 from supplyguard.clients.http import HttpClient
@@ -287,14 +288,15 @@ class PyPIAdapter(EcosystemAdapter):
         info = data.get("info") or {}
         releases: dict[str, list[dict]] = data.get("releases") or {}
 
-        published: dict[str, Any] = {}
+        published: dict[str, datetime] = {}
         for version, files in releases.items():
             stamps = [
-                parse_iso(f.get("upload_time_iso_8601") or f.get("upload_time"))
+                parsed
                 for f in files or []
+                if (parsed := parse_iso(f.get("upload_time_iso_8601") or f.get("upload_time")))
             ]
-            stamps = [s for s in stamps if s]
             if stamps:
+                # A release can ship several files; the earliest is its date.
                 published[version] = min(stamps)
 
         latest = info.get("version")
@@ -304,7 +306,7 @@ class PyPIAdapter(EcosystemAdapter):
         # PyPI cannot show us file contents, but the *shape* of the release is
         # itself a signal: with no wheel, pip builds from the sdist and executes
         # setup.py on the installing machine.
-        latest_files = releases.get(latest) or []
+        latest_files = releases.get(latest, []) if latest else []
         has_wheel = any(f.get("packagetype") == "bdist_wheel" for f in latest_files)
         has_sdist = any(f.get("packagetype") == "sdist" for f in latest_files)
         install_scripts: dict[str, str] = {}

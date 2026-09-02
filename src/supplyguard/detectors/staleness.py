@@ -92,9 +92,7 @@ class StalenessDetector(Detector):
             severity = Severity.INFO
             if meta.deprecated:
                 severity = Severity.MEDIUM
-            elif majors and majors >= 2 and (age_days or 0) > config.stale_days_behind:
-                severity = Severity.LOW
-            elif majors or (age_days or 0) > config.stale_days_behind:
+            elif majors and majors >= 2 and (age_days or 0) > config.stale_days_behind or majors or (age_days or 0) > config.stale_days_behind:
                 severity = Severity.LOW
             else:
                 # Merely one patch behind is noise, not a finding.

@@ -10,12 +10,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable
-from typing import Any, TypeVar
-
-T = TypeVar("T")
+from typing import Any
 
 
-async def gather_bounded(
+async def gather_bounded[T](
     coros: list[Awaitable[T]], *, chunk: int = 32
 ) -> list[T | BaseException]:
     """Run awaitables in fixed-size batches, returning exceptions inline.

@@ -11,15 +11,13 @@ from datetime import timedelta
 
 import pytest
 
+from supplyguard.core.scoring import score_findings
 from supplyguard.core.types import (
     Finding,
     FindingCategory,
     PackageMetadata,
-    ResolvedPackage,
     Severity,
 )
-from supplyguard.core.scoring import score_findings
-from supplyguard.detectors.base import DetectorConfig
 from supplyguard.detectors.dependency_confusion import DependencyConfusionDetector
 from supplyguard.detectors.malicious import MaliciousPackageDetector
 from supplyguard.detectors.typosquat import TyposquatDetector
@@ -236,17 +234,17 @@ class TestMaliciousHeuristics:
 
 class TestScoring:
     def _finding(self, **kwargs) -> Finding:
-        defaults = dict(
-            category=FindingCategory.VULNERABILITY,
-            severity=Severity.HIGH,
-            title="t",
-            description="d",
-            package_name="p",
-            package_version="1.0.0",
-            depth=0,
-            is_direct=True,
-            confidence=1.0,
-        )
+        defaults: dict = {
+            "category": FindingCategory.VULNERABILITY,
+            "severity": Severity.HIGH,
+            "title": "t",
+            "description": "d",
+            "package_name": "p",
+            "package_version": "1.0.0",
+            "depth": 0,
+            "is_direct": True,
+            "confidence": 1.0,
+        }
         defaults.update(kwargs)
         return Finding(**defaults)  # type: ignore[arg-type]
 

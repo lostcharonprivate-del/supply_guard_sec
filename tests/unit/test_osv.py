@@ -124,7 +124,8 @@ class TestMaliciousClassification:
 
 class TestDeduplication:
     def _vuln(self, **kwargs) -> Vulnerability:
-        defaults = dict(id="GHSA-a", summary="s", details="d", aliases=["CVE-2020-1"])
+        defaults: dict = {"id": "GHSA-a", "summary": "s", "details": "d",
+                          "aliases": ["CVE-2020-1"]}
         defaults.update(kwargs)
         return Vulnerability(**defaults)  # type: ignore[arg-type]
 

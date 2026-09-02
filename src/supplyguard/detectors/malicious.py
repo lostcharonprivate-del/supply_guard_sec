@@ -32,7 +32,6 @@ from supplyguard.core.types import (
 )
 from supplyguard.detectors.base import Detector, ScanContext, register_detector
 from supplyguard.detectors.script_analysis import (
-    ScriptAnalysis,
     analyse_scripts,
     combined_score,
 )

@@ -22,7 +22,7 @@ from supplyguard.clients.cache import Cache
 from supplyguard.clients.github import GitHubClient, parse_repository_url
 from supplyguard.clients.http import HttpClient
 from supplyguard.core.scoring import RiskScore, score_findings
-from supplyguard.core.types import DependencyGraph, Finding, ScanStatus, SEVERITY_ORDER
+from supplyguard.core.types import SEVERITY_ORDER, DependencyGraph, Finding, ScanStatus
 from supplyguard.detectors.base import (
     Detector,
     DetectorConfig,

@@ -151,21 +151,25 @@ _ROW_OFFSET = [0.0, 0.5, 0.75, 1.25]
 
 
 def _build_adjacency() -> dict[str, set[str]]:
+    """Map each key to the keys a finger can physically slip onto.
+
+    Rows are offset horizontally the way a real keyboard staggers them, so that
+    `s` counts as adjacent to `w` and `e` but not to `r`.
+    """
     positions: dict[str, tuple[float, float]] = {}
-    for row_index, row in enumerate(_QWERTY_ROWS):
-        for col_index, char in enumerate(row):
-            positions[char] = (row_index, col_index + _ROW_OFFSET[row_index])
+    for row_index, row_keys in enumerate(_QWERTY_ROWS):
+        for col_index, char in enumerate(row_keys):
+            positions[char] = (float(row_index), col_index + _ROW_OFFSET[row_index])
 
     adjacency: dict[str, set[str]] = {}
-    for char, (row, col) in positions.items():
-        neighbours = {
+    for char, (char_row, char_col) in positions.items():
+        adjacency[char] = {
             other
             for other, (other_row, other_col) in positions.items()
             if other != char
-            and abs(other_row - row) <= 1
-            and abs(other_col - col) <= 1.0
+            and abs(other_row - char_row) <= 1
+            and abs(other_col - char_col) <= 1.0
         }
-        adjacency[char] = neighbours
     return adjacency
 
 
@@ -243,6 +247,10 @@ def has_unicode_confusables(value: str) -> bool:
     )
 
 
+#: Folds that must run before lowercasing, or the confusion they encode is lost.
+_CASE_SENSITIVE_FOLDS = str.maketrans({"I": "l", "|": "l", "\u0130": "l"})
+
+
 def homoglyph_skeleton(value: str) -> str:
     """Reduce a name to a canonical form that collapses visual lookalikes.
 
@@ -255,7 +263,7 @@ def homoglyph_skeleton(value: str) -> str:
     # they encode is destroyed. Capital I, lowercase l and the digit 1 render
     # near-identically in most sans-serif fonts: `jeIlyfish` was a real 2019
     # PyPI package that stole SSH keys from anyone who fat-fingered `jellyfish`.
-    text = text.translate(str.maketrans({"I": "l", "|": "l", "\u0130": "l"}))
+    text = text.translate(_CASE_SENSITIVE_FOLDS)
     text = text.lower()
     text = "".join(_UNICODE_CONFUSABLES.get(char, char) for char in text)
     # Strip combining marks left over from decomposition.

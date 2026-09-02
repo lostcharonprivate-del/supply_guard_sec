@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from typing import ClassVar
 
 from supplyguard.clients.http import HttpClient
@@ -155,11 +156,12 @@ class RubyGemsAdapter(EcosystemAdapter):
             return PackageMetadata(ecosystem=self.name, name=name, exists=False)
 
         versions = await self._fetch_versions(name, http)
-        published = {
-            v["number"]: parse_iso(v.get("created_at"))
-            for v in versions
-            if v.get("number") and parse_iso(v.get("created_at"))
-        }
+        published: dict[str, datetime] = {}
+        for entry in versions:
+            number = entry.get("number")
+            released = parse_iso(entry.get("created_at"))
+            if number and released:
+                published[str(number)] = released
         info = data.get("info") or ""
         return PackageMetadata(
             ecosystem=self.name,
@@ -172,7 +174,7 @@ class RubyGemsAdapter(EcosystemAdapter):
             license=", ".join(data.get("licenses") or []) or None,
             first_published=min(published.values()) if published else None,
             last_published=max(published.values()) if published else None,
-            version_published=published,  # type: ignore[arg-type]
+            version_published=published,
             downloads_last_month=None,
             maintainers=[],
             has_readme=len(info.strip()) > 40,
