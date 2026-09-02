@@ -42,7 +42,7 @@ CATEGORY_WEIGHTS: dict[FindingCategory, float] = {
     # Staleness is a leading indicator, not a live exposure. Weighted low
     # enough that a neglected-but-uncompromised project is not mistaken for a
     # breached one.
-    FindingCategory.STALE: 0.15,
+    FindingCategory.STALE: 0.10,
 }
 
 #: Dev-only dependencies do not ship to production. They still matter — a

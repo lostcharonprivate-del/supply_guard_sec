@@ -234,8 +234,6 @@ class HttpClient:
 
     async def gather(self, coros: list[Any], *, chunk: int = 32) -> list[Any]:
         """Run coroutines with bounded concurrency, returning exceptions inline."""
-        results: list[Any] = []
-        for i in range(0, len(coros), chunk):
-            batch = coros[i : i + chunk]
-            results.extend(await asyncio.gather(*batch, return_exceptions=True))
-        return results
+        from supplyguard.utils.concurrency import gather_bounded
+
+        return await gather_bounded(coros, chunk=chunk)

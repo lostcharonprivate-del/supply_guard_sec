@@ -27,6 +27,7 @@ from supplyguard.core.types import (
 from supplyguard.detectors.base import Detector, ScanContext, register_detector
 from supplyguard.detectors.reference_sets import ReferencePackage, ReferenceSet, load_reference_set
 from supplyguard.detectors.similarity import Signal, SignalKind, analyse_pair
+from supplyguard.utils.concurrency import gather_bounded
 from supplyguard.utils.dates import days_since
 
 #: Signals strong enough to justify a finding on their own when corroborated.
@@ -113,7 +114,7 @@ class TyposquatDetector(Detector):
         """Fetch download counts for the shortlist, when the registry has them."""
         if ctx.adapter.download_metric == "none":
             return {}
-        results = await ctx.http.gather([ctx.metadata.downloads(n) for n in names])
+        results = await gather_bounded([ctx.metadata.downloads(n) for n in names])
         return {
             ctx.adapter.normalize_name(name): (value if isinstance(value, int) else None)
             for name, value in zip(names, results, strict=False)

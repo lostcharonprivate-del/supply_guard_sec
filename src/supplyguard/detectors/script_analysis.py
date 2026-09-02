@@ -102,6 +102,8 @@ _PATTERNS: list[tuple[Behaviour, str, float, str]] = [
      "Long run of hex escapes"),
 
     # -- dynamic execution --------------------------------------------------
+    (Behaviour.DYNAMIC_EVAL, r"\b(?:python\d?|node|ruby|perl)\s+-(?:e|c)\b", 0.4,
+     "Runs inline source through an interpreter rather than a checked-in script"),
     (Behaviour.DYNAMIC_EVAL, r"\beval\s*\(", 0.7, "Calls eval()"),
     (Behaviour.DYNAMIC_EVAL, r"\bnew\s+Function\s*\(", 0.7, "Constructs a function from a string"),
     (Behaviour.DYNAMIC_EVAL, r"\bexec\s*\(|\bexecSync\s*\(", 0.55, "Executes a command string"),

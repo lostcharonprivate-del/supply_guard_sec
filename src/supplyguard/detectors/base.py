@@ -24,6 +24,7 @@ from supplyguard.core.types import (
     ResolvedPackage,
 )
 from supplyguard.ecosystems.base import EcosystemAdapter
+from supplyguard.utils.concurrency import gather_bounded
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ class MetadataProvider:
 
     async def get_many(self, names: list[str]) -> dict[str, PackageMetadata]:
         unique = list(dict.fromkeys(names))
-        results = await self.http.gather([self.get(n) for n in unique])
+        results = await gather_bounded([self.get(n) for n in unique])
         out: dict[str, PackageMetadata] = {}
         for name, result in zip(unique, results, strict=False):
             if isinstance(result, PackageMetadata):

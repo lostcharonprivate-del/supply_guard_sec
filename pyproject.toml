@@ -53,6 +53,11 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
 filterwarnings = ["ignore::DeprecationWarning"]
+# Network tests are opt-in: `pytest -m network`.
+addopts = "-m 'not network'"
+markers = [
+    "network: hits real external APIs (OSV, registries, GitHub)",
+]
 
 [tool.ruff]
 line-length = 100
