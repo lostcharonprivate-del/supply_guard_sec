@@ -308,3 +308,94 @@ class TestScoring:
             self._finding(severity=Severity.CRITICAL, package_name=f"p{i}") for i in range(500)
         ]
         assert 0.0 <= score_findings(many).score <= 100.0
+
+
+class TestDependencyConfusionFalsePositives:
+    async def test_a_popular_public_package_is_not_treated_as_internal(self) -> None:
+        """`internal-slot` is a top-2000 npm package, not somebody's private lib.
+
+        Its name matches the internal-marker heuristic, so without the
+        popular-package guard every Node project in existence reports a critical
+        dependency-confusion finding for it.
+        """
+        ctx = make_context(
+            "npm",
+            [("internal-slot", "1.0.7")],
+            metadata={"internal-slot": meta("internal-slot", ecosystem="npm")},
+        )
+        assert await DependencyConfusionDetector().detect(ctx) == []
+
+    async def test_an_explicitly_private_scope_still_wins_over_popularity(self) -> None:
+        """Declared configuration beats inference from the name."""
+        ctx = make_context(
+            "npm",
+            [("@acme/internal-slot", "1.0.0")],
+            metadata={"@acme/internal-slot": meta("@acme/internal-slot", ecosystem="npm")},
+            registry_configs={
+                ".npmrc": "@acme:registry=https://npm.internal.acme.com/\n"
+            },
+        )
+        findings = await DependencyConfusionDetector().detect(ctx)
+        shadowing = [f for f in findings if f.package_name == "@acme/internal-slot"]
+        assert len(shadowing) == 1
+        assert shadowing[0].severity is Severity.CRITICAL
+
+    async def test_a_genuinely_internal_looking_name_is_still_flagged(self) -> None:
+        ctx = make_context(
+            "npm",
+            [("acme-internal-toolkit", "1.0.0")],
+            metadata={
+                "acme-internal-toolkit": meta("acme-internal-toolkit", ecosystem="npm")
+            },
+        )
+        findings = await DependencyConfusionDetector().detect(ctx)
+        assert len(findings) == 1
+
+
+class TestRepositoryMismatch:
+    """Repository-link checking.
+
+    The heuristic compares a package's name against the repository it links to.
+    Registries hold deep links (`.../crass/tree/v1.0.7`), so naively taking the
+    last path segment compares the package against a git tag and reports a
+    mismatch for a perfectly ordinary gem.
+    """
+
+    @pytest.mark.parametrize(
+        ("package", "url"),
+        [
+            ("crass", "https://github.com/rgrove/crass/tree/v1.0.7"),
+            ("crass", "https://github.com/rgrove/crass"),
+            ("express", "https://github.com/expressjs/express.git"),
+            ("lodash", "https://github.com/lodash/lodash/blob/main/README.md"),
+            ("@babel/core", "https://github.com/babel/babel/tree/main/packages/babel-core"),
+            ("nokogiri", "https://github.com/sparklemotion/nokogiri"),
+            ("django-redis", "https://github.com/jazzband/django-redis"),
+        ],
+    )
+    def test_legitimate_repository_links_are_not_flagged(self, package: str, url: str) -> None:
+        from supplyguard.detectors.malicious import _repository_mismatch
+
+        assert _repository_mismatch(package, url) is None
+
+    def test_a_genuinely_unrelated_repository_is_flagged(self) -> None:
+        from supplyguard.detectors.malicious import _repository_mismatch
+
+        result = _repository_mismatch(
+            "payment-helper", "https://github.com/attacker/totally-unrelated"
+        )
+        assert result is not None and "totally-unrelated" in result
+
+    @pytest.mark.parametrize(
+        ("url", "expected"),
+        [
+            ("https://github.com/owner/repo/tree/v1.2.3", "repo"),
+            ("https://gitlab.com/group/project/-/tree/main", "project"),
+            ("https://git.example.com/repo/tree/v1", "repo"),
+            ("github.com/owner/repo", "repo"),
+        ],
+    )
+    def test_repository_name_extraction(self, url: str, expected: str) -> None:
+        from supplyguard.detectors.malicious import _repository_name
+
+        assert _repository_name(url) == expected

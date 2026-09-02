@@ -25,6 +25,7 @@ from supplyguard.core.types import (
     Severity,
 )
 from supplyguard.detectors.base import Detector, ScanContext, register_detector
+from supplyguard.detectors.reference_sets import load_reference_set
 from supplyguard.ecosystems.registry_config import (
     RegistryConfig,
     is_public_registry,
@@ -94,7 +95,16 @@ class DependencyConfusionDetector(Detector):
     def _is_internal_name(
         self, ctx: ScanContext, package: ResolvedPackage, private_scopes: set[str]
     ) -> tuple[bool, str] | tuple[bool, None]:
-        """Decide whether a package was *meant* to be private, and say why."""
+        """Decide whether a package was *meant* to be private, and say why.
+
+        Declared intent beats inference: a namespace the project explicitly
+        routes to a private registry is internal regardless of what its name
+        looks like. Only when there is no such declaration do the name-shape
+        heuristics apply, and those are then checked against the popular-package
+        reference set — `internal-slot` is a top-2000 npm package pulled in by
+        half the ecosystem, and calling it an internal package because its name
+        starts with "internal" is simply wrong.
+        """
         name = package.name
         scope = ctx.adapter.scope_of(name)
         if scope and scope.lower() in private_scopes:
@@ -102,11 +112,27 @@ class DependencyConfusionDetector(Detector):
         for pattern in ctx.config.internal_name_patterns:
             if re.search(pattern, name, re.IGNORECASE):
                 return True, f"it matches the configured internal pattern '{pattern}'"
+
+        # Beyond this point the evidence is only the name, so a package that is
+        # demonstrably a popular public package is not treated as internal.
+        if self._is_known_public_package(ctx, name):
+            return False, None
         if _INTERNAL_HINTS.search(name):
             return True, "its name contains an internal-only marker"
         if ctx.adapter.looks_private(name) and not scope:
             return True, "its name follows an internal naming convention"
         return False, None
+
+    @staticmethod
+    def _is_known_public_package(ctx: ScanContext, name: str) -> bool:
+        """Whether the name is one of the ecosystem's most-downloaded packages."""
+        try:
+            reference = load_reference_set(
+                ctx.adapter.name, limit=ctx.config.reference_set_size
+            )
+        except Exception:
+            return False
+        return reference.contains(name)
 
     # -- 1. resolver configuration ------------------------------------------
     def _check_resolver_configuration(

@@ -195,3 +195,43 @@ class TestScanFlow:
             headers=headers,
         )
         assert response.status_code == 422
+
+
+class TestScanStatusVisibility:
+    async def test_running_status_is_visible_while_the_scan_is_in_flight(
+        self, client: AsyncClient
+    ) -> None:
+        """A poller must be able to distinguish a running scan from a queued one.
+
+        The transition is committed rather than flushed, because a flush leaves
+        it inside the worker's open transaction where no other connection can
+        see it — the scan would report `queued` right up until it finished.
+        """
+        headers = await register(client)
+        submitted = await client.post(
+            "/api/v1/scans",
+            json={
+                "files": {"package-lock.json": load_fixture("npm", "package-lock.json")},
+                "detectors": ["typosquat"],
+            },
+            headers=headers,
+        )
+        scan_id = submitted.json()["scan_id"]
+
+        seen: set[str] = set()
+        for _ in range(80):
+            await asyncio.sleep(0.1)
+            payload = (
+                await client.get(
+                    f"/api/v1/scans/{scan_id}?include_findings=false", headers=headers
+                )
+            ).json()
+            seen.add(payload["status"])
+            if payload["status"] in ("completed", "failed"):
+                break
+
+        assert "completed" in seen, seen
+        assert "running" in seen, (
+            f"never observed the running state, only {seen}; the status transition "
+            "is not visible to other connections"
+        )

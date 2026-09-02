@@ -61,7 +61,11 @@ async def run_and_persist_scan(
     project = await session.get(Project, scan.project_id)
     scan.status = ScanStatus.RUNNING.value
     scan.started_at = utcnow()
-    await session.flush()
+    # Commit, not just flush: a flush keeps the transition inside this
+    # transaction, so a client polling on another connection would keep seeing
+    # `queued` for the entire scan and could not tell a running scan from a
+    # stuck one.
+    await session.commit()
 
     settings = get_settings()
     cache = await build_cache(settings.redis_url)

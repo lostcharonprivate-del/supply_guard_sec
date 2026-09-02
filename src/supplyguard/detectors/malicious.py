@@ -409,6 +409,35 @@ def _unique_by_name(packages: list[ResolvedPackage]) -> list[ResolvedPackage]:
     return list(seen.values())
 
 
+def _repository_name(repository_url: str) -> str | None:
+    """Extract the repository name from a forge URL.
+
+    Not simply the last path segment: registries routinely hold deep links such
+    as `https://github.com/rgrove/crass/tree/v1.0.7` or `.../blob/main/README`,
+    and taking the tail would compare the package against a tag name. On the
+    known forges the repository is always the second path segment.
+    """
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(repository_url if "//" in repository_url else f"//{repository_url}")
+    segments = [segment for segment in parts.path.split("/") if segment]
+    if not segments:
+        return None
+    host = (parts.netloc or "").lower()
+    if any(forge in host for forge in ("github.com", "gitlab.com", "bitbucket.org", "codeberg.org")):
+        # owner/repo[/tree/ref/...]
+        name = segments[1] if len(segments) >= 2 else segments[0]
+    else:
+        # Unknown host: drop anything that looks like a ref or a view path.
+        trimmed: list[str] = []
+        for segment in segments:
+            if segment in ("tree", "blob", "-", "src", "browse", "releases", "tags"):
+                break
+            trimmed.append(segment)
+        name = trimmed[-1] if trimmed else segments[0]
+    return name.removesuffix(".git") or None
+
+
 def _repository_mismatch(package_name: str, repository_url: str) -> str | None:
     """Whether a linked repository plausibly belongs to this package.
 
@@ -417,7 +446,7 @@ def _repository_mismatch(package_name: str, repository_url: str) -> str | None:
     """
     from supplyguard.detectors.similarity import normalise_separators
 
-    slug = repository_url.rstrip("/").rsplit("/", 1)[-1].removesuffix(".git")
+    slug = _repository_name(repository_url)
     if not slug:
         return None
     normalised_slug = normalise_separators(slug)
