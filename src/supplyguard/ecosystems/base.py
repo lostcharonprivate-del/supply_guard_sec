@@ -38,6 +38,10 @@ class EcosystemAdapter(ABC):
     lockfile_patterns: ClassVar[tuple[str, ...]] = ()
     #: Registry config files inspected by the dependency-confusion detector.
     registry_config_patterns: ClassVar[tuple[str, ...]] = ()
+    #: What :meth:`fetch_download_count` actually returns. RubyGems only
+    #: publishes lifetime totals, which are ~50x a monthly figure, so callers
+    #: must scale their thresholds rather than compare across ecosystems naively.
+    download_metric: ClassVar[str] = "monthly"  # "monthly" | "lifetime" | "none"
     #: True when the ecosystem has namespaces that can be claimed (npm @scope,
     #: Maven groupId). Drives scope-squatting checks.
     supports_scopes: ClassVar[bool] = False

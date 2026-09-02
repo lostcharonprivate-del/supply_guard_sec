@@ -35,6 +35,8 @@ class MavenAdapter(EcosystemAdapter):
     #: A Maven coordinate's groupId *is* a namespace, and one that must be
     #: proven-owned (via DNS or GitHub) before Central will accept a publish.
     supports_scopes: ClassVar[bool] = True
+    #: Maven Central publishes no download statistics at all.
+    download_metric: ClassVar[str] = "none"
 
     # -- naming -------------------------------------------------------------
     def normalize_name(self, name: str) -> str:

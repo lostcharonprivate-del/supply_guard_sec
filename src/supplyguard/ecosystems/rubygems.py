@@ -27,6 +27,7 @@ class RubyGemsAdapter(EcosystemAdapter):
     manifest_patterns: ClassVar[tuple[str, ...]] = ("Gemfile.lock", "gems.locked", "Gemfile")
     lockfile_patterns: ClassVar[tuple[str, ...]] = ("Gemfile.lock", "gems.locked")
     registry_config_patterns: ClassVar[tuple[str, ...]] = (".gemrc", "Gemfile")
+    download_metric: ClassVar[str] = "lifetime"
 
     def registry_package_url(self, name: str) -> str:
         return f"https://rubygems.org/gems/{name}"
@@ -197,11 +198,10 @@ class RubyGemsAdapter(EcosystemAdapter):
         return data if isinstance(data, list) else []
 
     async def fetch_download_count(self, name: str, http: HttpClient) -> int | None:
-        """RubyGems reports lifetime downloads only.
+        """Lifetime downloads — RubyGems publishes no per-period figure.
 
-        Approximated to a monthly figure so that the cross-ecosystem "is this
-        package obscure?" threshold stays comparable; the estimate is recorded
-        in the finding evidence rather than presented as a measured value.
+        Reported as-is rather than divided into a fake monthly number; callers
+        read :attr:`download_metric` and scale their thresholds instead.
         """
         data = await http.get_json(f"{API}/gems/{name}.json", ttl=86_400)
         if not data:
