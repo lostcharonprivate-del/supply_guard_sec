@@ -1,0 +1,25 @@
+# SHA-pinned actions are immutable, which is the point — but immutable also
+# means they never get security fixes on their own. Dependabot bumps the SHA
+# and rewrites the trailing version comment, so pinning costs no staleness.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps(frontend)
