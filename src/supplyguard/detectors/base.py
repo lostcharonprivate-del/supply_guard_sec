@@ -66,6 +66,9 @@ class DetectorConfig:
     organization_scopes: tuple[str, ...] = ()
 
     # --- general ---
+    #: Wall-clock budget for a single detector. A registry that stalls should
+    #: cost that detector's findings, not the entire scan.
+    detector_timeout_seconds: float = 120.0
     #: Skip registry metadata lookups for packages deeper than this. Keeps a
     #: 5,000-package monorepo scan from making 5,000 registry calls when the
     #: heuristics matter most for shallow, recently-added dependencies.
@@ -190,7 +193,17 @@ class Detector(ABC):
         lose the findings produced by the other four.
         """
         try:
-            findings = await self.detect(ctx)
+            findings = await asyncio.wait_for(
+                self.detect(ctx), timeout=ctx.config.detector_timeout_seconds
+            )
+        except TimeoutError:
+            logger.warning("detector %s timed out", self.name)
+            ctx.notes.append(
+                f"Detector '{self.name}' exceeded its "
+                f"{ctx.config.detector_timeout_seconds:.0f}s budget and was stopped; "
+                "its findings are missing from this scan."
+            )
+            return []
         except Exception as exc:
             logger.exception("detector %s failed", self.name)
             ctx.notes.append(f"Detector '{self.name}' failed and was skipped: {exc}")

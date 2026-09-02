@@ -69,10 +69,11 @@ class MavenAdapter(EcosystemAdapter):
     def _parse_pom(self, content: str, filename: str) -> DependencyGraph:
         """Parse pom.xml.
 
-        A pom lists only declared dependencies: Maven resolves the transitive
-        closure at build time from each dependency's own pom. That resolution is
-        performed later by :mod:`supplyguard.scanner` for Maven projects, so the
-        graph produced here is the direct layer.
+        A pom lists only declared dependencies. Maven resolves the transitive
+        closure at build time by walking each dependency's own POM, applying
+        dependency management, exclusions and nearest-wins conflict resolution.
+        Reimplementing that faithfully is a project in itself, so the graph
+        produced here is the direct layer only and the scan says so.
         """
         try:
             root = ElementTree.fromstring(content.encode())
@@ -126,8 +127,10 @@ class MavenAdapter(EcosystemAdapter):
         if not found and root.tag.endswith("project"):
             graph.warnings.append("pom.xml declares no dependencies.")
         graph.warnings.append(
-            "pom.xml lists direct dependencies only; transitive artifacts are "
-            "resolved from Maven Central during the scan."
+            "pom.xml lists declared dependencies only. Maven resolves the "
+            "transitive closure at build time from each dependency's own POM, "
+            "which SupplyGuard does not reproduce — upload a gradle.lockfile, "
+            "or the output of `mvn dependency:list`, for transitive coverage."
         )
         return graph
 

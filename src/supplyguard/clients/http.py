@@ -100,7 +100,7 @@ class HttpClient:
         self,
         cache: Cache | None = None,
         *,
-        timeout: float = 20.0,
+        timeout: float = 15.0,
         max_retries: int = 3,
         user_agent: str = "SupplyGuard/0.1 (+https://github.com/supplyguard)",
         rates: dict[str, float] | None = None,
@@ -116,7 +116,10 @@ class HttpClient:
         headers = {"User-Agent": user_agent, "Accept": "application/json"}
         headers.update(default_headers or {})
         self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout),
+            # Split rather than a single value: registries occasionally accept a
+            # connection and then stall, and waiting the full read budget to
+            # discover that wastes the whole scan's latency.
+            timeout=httpx.Timeout(timeout, connect=min(5.0, timeout), pool=min(5.0, timeout)),
             headers=headers,
             follow_redirects=True,
             limits=httpx.Limits(max_connections=max_concurrency),
