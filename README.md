@@ -85,7 +85,7 @@ running server instead.
 
 ```bash
 uv venv --python 3.12 && uv pip install -e ".[dev]"
-pytest                                        # 221 tests, offline
+pytest                                        # 245 tests, offline
 pytest -m network                             # the live-API tests
 
 supplyguard serve                             # API on :8000 (SQLite, no Redis needed)
@@ -216,6 +216,12 @@ range semantics — that would be a rich source of silent false negatives.
 - Dev-only dependencies are reported but weighted down; many never ship to production.
 - Distribution-patched builds with backported fixes are invisible to OSV, so a
   vendored-and-patched copy can still be flagged.
+
+When a GitHub token is configured, advisories that OSV publishes without a CVSS
+vector are cross-checked against the GitHub Advisory Database for a numeric score.
+This corroborates severity only — it never adds or removes a finding, since OSV
+already aggregates GHSA. Without a token the step is skipped and the scan says so.
+Sonatype OSS Index and deps.dev are not integrated.
 
 **False negatives**
 - Only advisories already published *and* mapped to a package range are found. A
@@ -482,7 +488,7 @@ src/supplyguard/
 ```
 
 ```bash
-pytest                      # 221 tests, offline and deterministic
+pytest                      # 245 tests, offline and deterministic
 pytest -m network           # live-API tests, opt-in
 ruff check src tests
 mypy src

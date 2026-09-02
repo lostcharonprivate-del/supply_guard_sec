@@ -199,6 +199,7 @@ class Scanner:
                     config=request.config,
                     registry_configs=self._configs_for(adapter, registry_configs),
                     repository_url=request.repository_url,
+                    github_token=self.github_token,
                 )
                 findings = await self._run_detectors(detectors, ctx, request)
                 all_findings.extend(findings)

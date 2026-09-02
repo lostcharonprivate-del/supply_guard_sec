@@ -397,3 +397,52 @@ class TestRepositoryMismatch:
         from supplyguard.detectors.malicious import _repository_name
 
         assert _repository_name(url) == expected
+
+
+class TestGitHubAdvisoryCorroboration:
+    """The GHSA cross-check corroborates severity; it never adds findings.
+
+    OSV already aggregates GHSA, so a second source of *findings* would only
+    duplicate. What GHSA adds is a numeric CVSS score for the minority of OSV
+    entries published without a vector, where severity would otherwise rest on
+    a coarse label.
+    """
+
+    async def test_without_a_token_it_is_a_no_op(self) -> None:
+        from supplyguard.detectors.vulnerability import VulnerabilityDetector
+
+        ctx = make_context("pypi", [("requests", "2.25.1")])
+        assert ctx.github_token is None
+        findings = [
+            Finding(
+                category=FindingCategory.VULNERABILITY,
+                severity=Severity.MEDIUM,
+                title="t",
+                description="d",
+                package_name="requests",
+                identifier="CVE-2000-0001",
+                cvss_score=None,
+            )
+        ]
+        await VulnerabilityDetector()._corroborate_with_github(ctx, findings)
+        assert findings[0].cvss_score is None
+        assert ctx.notes == []
+
+    async def test_findings_that_already_have_a_score_are_left_alone(self) -> None:
+        from supplyguard.detectors.vulnerability import VulnerabilityDetector
+
+        ctx = make_context("pypi", [("requests", "2.25.1")])
+        ctx.github_token = "not-a-real-token"
+        finding = Finding(
+            category=FindingCategory.VULNERABILITY,
+            severity=Severity.HIGH,
+            title="t",
+            description="d",
+            package_name="requests",
+            identifier="CVE-2000-0002",
+            cvss_score=7.5,
+        )
+        # No HTTP client is available on the test context, so this would raise
+        # if the detector tried to query for an already-scored finding.
+        await VulnerabilityDetector()._corroborate_with_github(ctx, [finding])
+        assert finding.cvss_score == 7.5

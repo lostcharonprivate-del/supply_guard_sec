@@ -158,6 +158,9 @@ class ScanContext:
     registry_configs: dict[str, str] = field(default_factory=dict)
     #: Repository the manifest came from, when the scan started from a Git URL.
     repository_url: str | None = None
+    #: Enables optional GitHub-backed corroboration. Absent for most scans, so
+    #: anything using it must degrade cleanly to "not checked".
+    github_token: str | None = None
     #: Non-fatal notes surfaced to the user alongside findings.
     notes: list[str] = field(default_factory=list)
 
