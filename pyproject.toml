@@ -9,7 +9,7 @@ license = { text = "MIT" }
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
-    "pydantic>=2.9",
+    "pydantic[email]>=2.9",
     "pydantic-settings>=2.6",
     "httpx>=0.27",
     "sqlalchemy[asyncio]>=2.0.36",
@@ -20,8 +20,7 @@ dependencies = [
     "typer>=0.15",
     "rich>=13.9",
     "python-jose[cryptography]>=3.3",
-    "passlib[bcrypt]>=1.7.4",
-    "bcrypt>=4.0,<5",
+    "bcrypt>=4.1",
     "python-multipart>=0.0.17",
     "packaging>=24.2",
     "PyYAML>=6.0",
@@ -52,7 +51,12 @@ packages = ["src/supplyguard"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["src"]
-filterwarnings = ["ignore::DeprecationWarning"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    # Starlette renamed the 422 constant; FastAPI still emits the old one.
+    "ignore:.*HTTP_422_UNPROCESSABLE_ENTITY.*:DeprecationWarning",
+    "ignore::UserWarning",
+]
 # Network tests are opt-in: `pytest -m network`.
 addopts = "-m 'not network'"
 markers = [
