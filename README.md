@@ -8,7 +8,7 @@ exposure, and unmaintained dependencies — then monitors the GitHub Actions wor
 that build the project.
 
 ```bash
-git clone https://github.com/lostcharon/supply_guard_sec.git
+git clone https://github.com/lostcharonprivate-del/supply_guard_sec.git
 cd supply_guard_sec
 cp .env.example .env               # then edit JWT_SECRET
 docker compose up --build          # open http://localhost:8000
