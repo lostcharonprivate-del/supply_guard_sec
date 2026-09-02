@@ -163,6 +163,26 @@ class MavenAdapter(EcosystemAdapter):
         )
         return graph
 
+    async def namespace_is_claimed(self, scope: str, http: HttpClient) -> bool | None:
+        """A groupId is claimed if Maven Central holds any artifact under it.
+
+        Central verifies domain ownership before accepting a first publish to a
+        groupId, which makes namespace squatting substantially harder here than
+        on npm — but an *unclaimed* groupId is still registerable by whoever can
+        prove control of the matching domain.
+        """
+        try:
+            data = await http.get_json(
+                SEARCH_API,
+                params={"q": f'g:"{scope}"', "rows": "1", "wt": "json"},
+                ttl=86_400,
+            )
+        except Exception:
+            return None
+        response = (data or {}).get("response") or {}
+        found = response.get("numFound")
+        return bool(found) if isinstance(found, int) else None
+
     # -- registry -----------------------------------------------------------
     async def fetch_metadata(self, name: str, http: HttpClient) -> PackageMetadata:
         group, _, artifact = name.partition(":")

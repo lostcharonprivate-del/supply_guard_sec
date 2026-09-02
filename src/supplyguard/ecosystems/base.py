@@ -92,6 +92,16 @@ class EcosystemAdapter(ABC):
         """Monthly downloads, when the registry exposes them. None = unknown."""
         return None
 
+    async def namespace_is_claimed(self, scope: str, http: HttpClient) -> bool | None:
+        """Whether a namespace is already reserved on the *public* registry.
+
+        An unclaimed namespace is squattable: anyone can publish `@yourorg/x`
+        and win resolution against your private registry. Returns None when the
+        ecosystem has no namespaces or the answer cannot be determined —
+        callers must not treat None as "unclaimed".
+        """
+        return None
+
     @abstractmethod
     def registry_package_url(self, name: str) -> str:
         """Human-browsable registry page for a package."""

@@ -16,7 +16,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from typing import Any, ClassVar
 
 from supplyguard.clients.http import HttpClient
 from supplyguard.core.cvss import score_from_vector
@@ -53,10 +53,44 @@ class Vulnerability:
     withdrawn: datetime | None = None
     cwe_ids: list[str] = field(default_factory=list)
 
+    #: CWEs that mean "this package contains attacker-planted code", as opposed
+    #: to an ordinary defect. CWE-506 is Embedded Malicious Code; CWE-912 is
+    #: Hidden Functionality.
+    MALICIOUS_CWES: ClassVar[frozenset[str]] = frozenset({"CWE-506", "CWE-912"})
+
     @property
     def is_malicious(self) -> bool:
-        """OSV publishes malicious-package reports under the `MAL-` prefix."""
-        return self.id.startswith("MAL-")
+        """Whether this advisory describes a *malicious package*, not a bug.
+
+        Three sources agree on this, and all three matter:
+
+        * `MAL-` identifiers — the `ossf/malicious-packages` feed republished
+          through OSV.
+        * CWE-506 / CWE-912 — how the GitHub Advisory Database tags a package
+          that shipped attacker-planted code. Both the `event-stream` and
+          `ua-parser-js` compromises are GHSA entries carrying CWE-506, so
+          without this they would be reported as ordinary vulnerabilities.
+        * An explicit statement in the summary, as a last resort.
+        """
+        if self.id.startswith("MAL-"):
+            return True
+        if self.MALICIOUS_CWES.intersection(self.cwe_ids):
+            return True
+        text = f"{self.summary}".lower()
+        return any(
+            phrase in text
+            for phrase in ("malicious code in", "embedded malware", "malicious package")
+        )
+
+    @property
+    def malicious_source(self) -> str:
+        """Where the malicious classification came from, stated accurately."""
+        if self.id.startswith("MAL-"):
+            return "the OSV malicious-package feed (ossf/malicious-packages)"
+        if self.MALICIOUS_CWES.intersection(self.cwe_ids):
+            weaknesses = ", ".join(sorted(self.MALICIOUS_CWES.intersection(self.cwe_ids)))
+            return f"the GitHub Advisory Database, tagged {weaknesses} (embedded malicious code)"
+        return "an advisory that describes this package as malicious"
 
     @property
     def cve_id(self) -> str | None:

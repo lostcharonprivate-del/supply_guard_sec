@@ -16,6 +16,7 @@ from supplyguard.utils.dates import parse_iso
 
 REGISTRY = "https://registry.npmjs.org"
 DOWNLOADS_API = "https://api.npmjs.org/downloads/point/last-month"
+SEARCH_API = "https://registry.npmjs.org/-/v1/search"
 
 #: npm lifecycle hooks that execute automatically on `npm install`.
 INSTALL_HOOKS = ("preinstall", "install", "postinstall", "prepare", "prepublish")
@@ -341,6 +342,32 @@ class NpmAdapter(EcosystemAdapter):
                 "dist_tags": dist_tags,
                 "has_dist_files": bool(latest_doc.get("dist")),
             },
+        )
+
+    async def namespace_is_claimed(self, scope: str, http: HttpClient) -> bool | None:
+        """Check whether an npm @scope is in use on the public registry.
+
+        npm exposes no "does this org exist" endpoint without authentication.
+        The registry search API is fuzzy — it happily returns unrelated matches
+        for a nonexistent scope — so the reliable signal is not the result
+        count but whether any returned package name actually sits under the
+        scope. Heuristic, and reported as such.
+        """
+        if not scope.startswith("@"):
+            scope = f"@{scope}"
+        prefix = f"{scope.lower()}/"
+        try:
+            data = await http.get_json(
+                SEARCH_API, params={"text": prefix, "size": "20"}, ttl=86_400
+            )
+        except Exception:
+            return None
+        objects = (data or {}).get("objects") or []
+        if not objects:
+            return None
+        return any(
+            (o.get("package") or {}).get("name", "").lower().startswith(prefix)
+            for o in objects
         )
 
     async def fetch_download_count(self, name: str, http: HttpClient) -> int | None:
