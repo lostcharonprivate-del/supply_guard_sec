@@ -23,7 +23,7 @@ dependencies = [
     "bcrypt>=4.1",
     "python-multipart>=0.0.17",
     "packaging>=24.2",
-    "PyYAML>=6.0",
+    "PyYAML>=6.0.3",
     "aiosqlite>=0.20",
 ]
 
