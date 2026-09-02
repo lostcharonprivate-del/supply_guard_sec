@@ -8,8 +8,10 @@ exposure, and unmaintained dependencies — then monitors the GitHub Actions wor
 that build the project.
 
 ```bash
-git clone <this repo> && cd supplyguard
-docker compose up --build          # then open http://localhost:8000
+git clone https://github.com/lostcharon/supply_guard_sec.git
+cd supply_guard_sec
+cp .env.example .env               # then edit JWT_SECRET
+docker compose up --build          # open http://localhost:8000
 ```
 
 or, with no infrastructure at all:
@@ -30,6 +32,8 @@ pip install -e . && supplyguard scan ./path/to/your/project
 - [Risk scoring](#risk-scoring)
 - [Validation against real incidents](#validation-against-real-incidents)
 - [API](#api)
+- [Deployment](#deployment)
+- [Troubleshooting](#troubleshooting)
 - [Development](#development)
 
 ---
@@ -52,15 +56,41 @@ each package's real depth recorded — not the flat list a manifest gives you.
 
 ## Quick start
 
+### Prerequisites
+
+| For | You need |
+|---|---|
+| Docker route | Docker with Compose v2 (`docker compose version`) |
+| CLI / local route | Python 3.12+, and [uv](https://docs.astral.sh/uv/) or pip |
+| Dashboard development | Node 22+ |
+
+Nothing else. Postgres and Redis come from Compose; the CLI needs neither.
+
 ### Docker (everything)
 
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
 
 Brings up Postgres, Redis, the API (which also serves the dashboard) and a scan worker
-on <http://localhost:8000>. Set `GITHUB_TOKEN` in a `.env` file to raise the GitHub API
-limit from 60 to 5,000 requests/hour and to enable CI monitoring on private repositories.
+on <http://localhost:8000>. Database migrations run automatically — the API container's
+command is `alembic upgrade head` before `uvicorn`, so a first boot creates the schema
+and later boots apply any new revisions.
+
+The dashboard is served by the API container, so there is **one URL and no CORS to get
+wrong**. Register a user at <http://localhost:8000> and you are in.
+
+Two variables are worth setting in `.env` before you start:
+
+- **`JWT_SECRET`** — any long random string. `openssl rand -hex 32` produces one.
+  Leaving the default is fine locally and **not** fine anywhere else; see
+  [Deployment](#deployment).
+- **`GITHUB_TOKEN`** — optional, but unauthenticated GitHub access is capped at 60
+  requests/hour, which a single repository scan can exhaust. A token raises it to
+  5,000/hour and is required for private repositories and for CI monitoring.
+
+To stop, `docker compose down`; add `-v` to discard the Postgres volume as well.
 
 ### CLI (no server, no database, no Redis)
 
@@ -84,13 +114,16 @@ running server instead.
 ### Local development
 
 ```bash
-uv venv --python 3.12 && uv pip install -e ".[dev]"
-pytest                                        # 245 tests, offline
-pytest -m network                             # the live-API tests
+uv sync --extra dev                           # or: uv venv && uv pip install -e ".[dev]"
+uv run pytest                                 # 247 tests, offline and deterministic
+uv run pytest -m network                      # the live-API tests, opt-in
 
-supplyguard serve                             # API on :8000 (SQLite, no Redis needed)
-cd frontend && npm install && npm run dev     # dashboard on :5173, proxying to :8000
+uv run supplyguard serve                      # API on :8000 (SQLite, no Redis needed)
+cd frontend && npm ci && npm run dev          # dashboard on :5173, proxying to :8000
 ```
+
+`supplyguard serve` needs no Postgres and no Redis: it falls back to SQLite and to
+running scans in-process. That is the fastest way to see the thing work.
 
 ---
 
@@ -472,9 +505,132 @@ document fetches, not 250 queries.
 
 ---
 
+## Deployment
+
+Compose as shipped is a **working local stack, not a production deployment**. It uses
+a default database password, publishes no TLS, and defaults `ENVIRONMENT` to
+`development`. What follows is the gap between the two.
+
+### 1. Set the secrets
+
+```bash
+JWT_SECRET=$(openssl rand -hex 32)     # anything long and random
+ENVIRONMENT=production
+DATABASE_URL=postgresql+asyncpg://USER:STRONG_PASSWORD@HOST:5432/supplyguard
+REDIS_URL=redis://HOST:6379/0
+GITHUB_TOKEN=ghp_...                   # 60 -> 5,000 requests/hour
+CORS_ORIGINS=https://supplyguard.example.com
+```
+
+With `ENVIRONMENT=production` the app checks its own configuration at startup and logs
+
+```
+INSECURE CONFIGURATION: JWT_SECRET is still the default value.
+```
+
+for a default secret, an enabled `DEBUG`, or a `*` in `CORS_ORIGINS`. **These are
+warnings, not refusals** — the app boots anyway, because refusing to start is worse in
+a demo environment. Nothing enforces this for you, so grep your startup logs for
+`INSECURE CONFIGURATION` and treat a hit as a failed deploy.
+
+Changing `JWT_SECRET` invalidates every issued token; users log in again.
+
+### 2. Run the migrations
+
+The API container runs `alembic upgrade head` on boot, so Compose needs nothing extra.
+Running the API another way means running migrations yourself first:
+
+```bash
+alembic upgrade head
+```
+
+`create_all()` also runs at startup as a convenience for a first local boot. Alembic is
+what a real deployment should rely on — it is the only path that handles a schema
+change to an existing database.
+
+### 3. Scale the worker, or do not
+
+The `worker` service runs scans through Redis via arq. If it is absent or Redis is
+unreachable, the API runs scans **in-process instead** and the stack still works. That
+fallback is a convenience for small installs, not a scaling strategy: in-process scans
+compete with request handling. Run the worker in anything with real traffic, and scale
+it independently — scan cost tracks dependency-tree size, request cost does not.
+
+```bash
+docker compose up --scale worker=3
+```
+
+### 4. Put TLS in front
+
+The API speaks plain HTTP and does not terminate TLS. Run it behind a reverse proxy or
+ingress that does, and point `CORS_ORIGINS` at the public origin. JWTs travel in the
+`Authorization` header — over plain HTTP on an untrusted network they are readable.
+
+### 5. Harden Postgres
+
+The Compose Postgres uses `supplyguard:supplyguard` and is deliberately not published
+outside the Compose network (`expose`, not `ports`). A managed database with a real
+password and network policy is the production answer. The database holds password
+hashes and every scan result, so it is worth the same care as the application.
+
+### Deployment checklist
+
+- [ ] `JWT_SECRET` is a long random value, not the default
+- [ ] `ENVIRONMENT=production`, and startup logs contain no `INSECURE CONFIGURATION`
+- [ ] `DATABASE_URL` points at a database with a real password
+- [ ] `alembic upgrade head` has run against it
+- [ ] `CORS_ORIGINS` lists your real origin, no `*`
+- [ ] TLS terminates in front of the API
+- [ ] `GITHUB_TOKEN` is set, or you accept 60 GitHub requests/hour
+- [ ] The `worker` service is running
+
+### Health check
+
+`GET /health` returns 200 with the supported ecosystems, and is what the container's
+`HEALTHCHECK` polls. It does not touch the database: a 200 means the process is up, not
+that Postgres is reachable. If the database is down the API still starts, and every
+persistent endpoint fails — that is logged loudly at startup.
+
+---
+
+## Troubleshooting
+
+**Every GitHub call fails, or CI monitoring returns 502.** Unauthenticated GitHub
+access is 60 requests/hour and one repository scan can spend it. Set `GITHUB_TOKEN`.
+A failed CI analysis returns **502 with the reason**, never an empty timeline — an
+empty list would read as "your pipeline is clean" when the truth is "nothing was
+examined."
+
+**A scan sits at `queued` forever.** The worker is not running and Redis is
+unreachable, so nothing picked the job up. Either start the worker, or clear
+`REDIS_URL` to force the in-process path. A scan that is genuinely running reports
+`running`, not `queued` — the two are distinguishable on purpose.
+
+**`docker compose up` fails on the frontend build.** The image builds the dashboard
+with `npm ci`, which fails if `frontend/package.json` and `frontend/package-lock.json`
+have drifted. Run `npm install` in `frontend/` and commit the updated lockfile.
+
+**Port 8000 is already in use.** Change the published port in `docker-compose.yml`
+(`"8080:8000"`) and add the new origin to `CORS_ORIGINS`.
+
+**The dashboard loads but every request 401s.** The token expired — the default is 12
+hours (`JWT_EXPIRY_MINUTES`). Log in again. If it persists, `JWT_SECRET` changed
+between issuing and verifying, which invalidates every existing token.
+
+**Scans are slow.** The first scan of a tree is uncached and does real network work
+against OSV and the registries. Package metadata is cached 24h and advisories 6h, so a
+rescan is dramatically faster. Without Redis the cache is per-process and dies with it.
+
+---
+
 ## Development
 
 ```
+.github/workflows/ci.yml   lint, type-check, test, and build the Docker image
+data/reference-sets/       7,962 popular packages, checked in, for typosquat checks
+frontend/                  React dashboard (Vite + TypeScript)
+migrations/                Alembic revisions
+scripts/                   reference-set refresh
 src/supplyguard/
   core/          types, CVSS scoring, risk model   — no framework imports
   ecosystems/    adapter interface + npm, pypi, rubygems, maven
@@ -485,15 +641,23 @@ src/supplyguard/
   db/            SQLAlchemy models, session management
   jobs/          arq worker and queue
   scanner.py     orchestration          cli.py   command line
+tests/
+  unit/          detector, parser and scoring behaviour
+  integration/   API and end-to-end scanner tests
+  fixtures/      real lockfiles, not hand-written samples
 ```
 
 ```bash
-pytest                      # 245 tests, offline and deterministic
-pytest -m network           # live-API tests, opt-in
-ruff check src tests
-mypy src
-python scripts/refresh_reference_sets.py   # rebuild typosquat reference sets
+uv run pytest                  # 247 tests, offline and deterministic
+uv run pytest -m network       # live-API tests, opt-in
+uv run ruff check .
+uv run mypy src
+uv run python scripts/refresh_reference_sets.py   # rebuild typosquat reference sets
 ```
+
+CI runs exactly these, plus the dashboard build and a Docker image build, on every push
+and pull request. See [CONTRIBUTING.md](CONTRIBUTING.md) for what a good change looks
+like, and [SECURITY.md](SECURITY.md) for how to report a vulnerability.
 
 Tests are offline by default so the suite does not fail because a registry is slow or an
 advisory was republished. Parsers are exercised against a real 244-entry npm lockfile
@@ -502,4 +666,4 @@ misbehave at that scale.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).
