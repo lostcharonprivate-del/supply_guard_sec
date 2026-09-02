@@ -235,3 +235,68 @@ class TestScanStatusVisibility:
             f"never observed the running state, only {seen}; the status transition "
             "is not visible to other connections"
         )
+
+
+class TestCiScanFailureReporting:
+    """A failed CI analysis must not be served as a clean pipeline.
+
+    `CiMonitorResult.reached_github` already distinguishes the two states and
+    `tests/unit/test_ci.py` covers that property, but the bug was at the API
+    boundary: the route returned the empty finding list as a 200, and an empty
+    timeline reads as "your pipeline is clean" when the truth is "nothing was
+    examined". These tests pin the translation, not the property.
+    """
+
+    @staticmethod
+    async def _project(client: AsyncClient) -> tuple[dict, str]:
+        headers = await register(client)
+        created = await client.post(
+            "/api/v1/projects",
+            json={"name": "ci", "repository_url": "https://github.com/owner/repo"},
+            headers=headers,
+        )
+        return headers, created.json()["id"]
+
+    async def test_an_unreachable_repository_is_a_502_not_an_empty_timeline(
+        self, client: AsyncClient, monkeypatch
+    ) -> None:
+        from supplyguard.ci import monitor as monitor_module
+        from supplyguard.ci.monitor import CiMonitorResult
+
+        async def unreachable(self, ref, **kwargs) -> CiMonitorResult:
+            return CiMonitorResult(
+                repository=ref.full_name, errors=["403 rate limit exceeded"]
+            )
+
+        monkeypatch.setattr(monitor_module.CiMonitor, "analyse", unreachable)
+
+        headers, project_id = await self._project(client)
+        response = await client.post(
+            f"/api/v1/projects/{project_id}/ci/scan", json={}, headers=headers
+        )
+
+        assert response.status_code == 502, response.text
+        # The reason must reach the user, not just the status code.
+        assert "rate limit exceeded" in response.json()["detail"]
+
+    async def test_a_genuinely_clean_repository_still_returns_an_empty_list(
+        self, client: AsyncClient, monkeypatch
+    ) -> None:
+        """The contrast case: examined and clean is a 200, and must stay one."""
+        from supplyguard.ci import monitor as monitor_module
+        from supplyguard.ci.monitor import CiMonitorResult
+
+        async def clean(self, ref, **kwargs) -> CiMonitorResult:
+            return CiMonitorResult(
+                repository=ref.full_name, workflows_examined=3, runs_examined=12
+            )
+
+        monkeypatch.setattr(monitor_module.CiMonitor, "analyse", clean)
+
+        headers, project_id = await self._project(client)
+        response = await client.post(
+            f"/api/v1/projects/{project_id}/ci/scan", json={}, headers=headers
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json() == []

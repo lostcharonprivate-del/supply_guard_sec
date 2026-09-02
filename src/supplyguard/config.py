@@ -27,8 +27,10 @@ class Settings(BaseSettings):
     redis_url: str = Field(default="redis://localhost:6379/0")
 
     # -- auth ---------------------------------------------------------------
-    #: Must be overridden in any deployment; startup refuses the default when
-    #: environment is not "development".
+    #: Must be overridden in any deployment. Startup does not refuse the
+    #: default — it logs a loud INSECURE CONFIGURATION warning when
+    #: ENVIRONMENT is production, because refusing to boot would be worse in a
+    #: demo environment. Nothing enforces this for you: check the logs.
     jwt_secret: str = Field(default="change-me-in-production")
     jwt_algorithm: str = "HS256"
     jwt_expiry_minutes: int = 60 * 12

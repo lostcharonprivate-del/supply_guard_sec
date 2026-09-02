@@ -12,6 +12,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
+
 revision: str = '1aca3ab81717'
 down_revision: str | None = None
 branch_labels: str | Sequence[str] | None = None
