@@ -14,3 +14,9 @@ node_modules/
 frontend/dist/
 .DS_Store
 uploads/
+
+# Local development databases. A dev SQLite file carries real password hashes
+# and scan data; it has no business in a security tool's history.
+*.db
+*.sqlite
+*.sqlite3
