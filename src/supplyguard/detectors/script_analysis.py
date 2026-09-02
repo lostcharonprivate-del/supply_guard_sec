@@ -192,21 +192,25 @@ def analyse_script(source: str) -> ScriptAnalysis:
             Detection(behaviour, weight, description, _excerpt(source, match))
         )
 
-    if (entropy := shannon_entropy(source)) > 4.8 and len(source) > 120:
+    # Obfuscation is judged on an embedded blob, not on entropy alone.
+    #
+    # Entropy was originally the trigger here, and it was wrong: it was tuned
+    # against one-line npm install hooks, but a CI `run:` block is a full
+    # multi-line shell script whose ordinary mix of paths, flags and case runs
+    # at 5.0-5.5 bits. Scanning pytorch/pytorch produced 89 findings on that
+    # basis alone, every one of them a normal build step. What actually
+    # distinguishes an encoded payload is a long unbroken token; entropy only
+    # says how it is encoded, so it now strengthens that finding rather than
+    # standing on its own.
+    if (blob := _find_blob(source)) is not None:
+        entropy = shannon_entropy(blob)
         analysis.detections.append(
             Detection(
                 Behaviour.OBFUSCATION,
-                0.55,
-                f"High character entropy ({entropy:.2f} bits) for a build script, "
-                "consistent with an encoded or minified payload",
-            )
-        )
-    elif _looks_like_blob(source):
-        analysis.detections.append(
-            Detection(
-                Behaviour.OBFUSCATION,
-                0.5,
-                "Contains a long unbroken token typical of an embedded payload",
+                0.6 if entropy > 4.5 else 0.4,
+                f"Contains a {len(blob)}-character unbroken token "
+                f"({entropy:.1f} bits of entropy), typical of an embedded payload",
+                excerpt=blob[:60] + ("..." if len(blob) > 60 else ""),
             )
         )
     return analysis
@@ -239,11 +243,14 @@ def shannon_entropy(text: str) -> float:
     return -sum((c / total) * math.log2(c / total) for c in counts.values())
 
 
+#: A long unbroken run of base64/hex-safe characters. Real shell scripts break
+#: on whitespace and punctuation long before this; encoded payloads do not.
 _BLOB = re.compile(r"[A-Za-z0-9+/=_-]{120,}")
 
 
-def _looks_like_blob(text: str) -> bool:
-    return bool(_BLOB.search(text))
+def _find_blob(text: str) -> str | None:
+    match = _BLOB.search(text)
+    return match.group(0) if match else None
 
 
 def _excerpt(source: str, match: re.Match) -> str:

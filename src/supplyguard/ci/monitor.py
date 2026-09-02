@@ -60,6 +60,15 @@ class CiMonitorResult:
     runs_examined: int = 0
     workflows_examined: int = 0
     notes: list[str] = field(default_factory=list)
+    #: Calls that failed. An empty finding list means "nothing wrong" only when
+    #: this is also empty — otherwise it means "could not check", and the two
+    #: must never be presented to a user as the same answer.
+    errors: list[str] = field(default_factory=list)
+
+    @property
+    def reached_github(self) -> bool:
+        """Whether any part of the repository was successfully read."""
+        return bool(self.workflows_examined or self.runs_examined)
 
 
 class CiMonitor:
@@ -76,7 +85,9 @@ class CiMonitor:
                 "to 60 requests per hour and cannot read private repositories."
             )
 
-        workflows = await self._safe(self.client.list_workflow_files(ref), {})
+        workflows = await self._safe(
+            self.client.list_workflow_files(ref), {}, "listing workflow files", result
+        )
         result.workflows_examined = len(workflows)
         if not workflows:
             result.notes.append(
@@ -86,7 +97,9 @@ class CiMonitor:
             for issue in analyse_workflow(path, content):
                 result.findings.append(_from_workflow_issue(ref, issue))
 
-        runs = await self._safe(self.client.list_workflow_runs(ref, limit=run_limit), [])
+        runs = await self._safe(
+            self.client.list_workflow_runs(ref, limit=run_limit), [], "listing workflow runs", result
+        )
         result.runs_examined = len(runs)
         result.findings.extend(await self._analyse_commits(ref, runs, commit_limit))
         result.findings.extend(_analyse_run_patterns(ref, runs))
@@ -187,11 +200,13 @@ class CiMonitor:
         return findings
 
     @staticmethod
-    async def _safe(awaitable, default):
+    async def _safe(awaitable, default, what: str, result: CiMonitorResult):
+        """Run a call, recording rather than swallowing any failure."""
         try:
             return await awaitable
         except Exception as exc:
-            logger.warning("CI monitoring call failed: %s", exc)
+            logger.warning("CI monitoring failed while %s: %s", what, exc)
+            result.errors.append(f"Failed while {what}: {exc}")
             return default
 
 

@@ -57,6 +57,19 @@ async def scan_ci(
         await http.aclose()
         await cache.close()
 
+    if not result.reached_github:
+        # Returning an empty list here would tell the user their pipeline is
+        # clean when in truth nothing was examined. The most common cause is
+        # the unauthenticated GitHub limit of 60 requests/hour.
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=(
+                "Could not read this repository from GitHub, so no CI analysis "
+                "was performed. "
+                + " ".join(result.errors + result.notes)
+            ).strip(),
+        )
+
     stored = await _upsert_events(session, project.id, result.findings)
     return [CiEventResponse.model_validate(event) for event in stored]
 

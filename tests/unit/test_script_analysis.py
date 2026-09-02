@@ -89,3 +89,44 @@ class TestScoring:
 
     def test_entropy_separates_prose_from_encoded_blobs(self) -> None:
         assert shannon_entropy("aaaaaaaaaa") < shannon_entropy("a1B2c3D4e5F6g7H8")
+
+
+class TestObfuscationHeuristic:
+    """Obfuscation must key on an embedded blob, not on raw entropy.
+
+    Entropy was originally the trigger, tuned against one-line npm install
+    hooks. A CI `run:` block is a full shell script whose ordinary mix of paths,
+    flags and case runs at 5.0-5.5 bits, so scanning a large real repository
+    (pytorch/pytorch) reported 89 perfectly normal build steps.
+    """
+
+    REAL_CI_STEP = """
+    set -eux
+    python -m pip install --upgrade pip setuptools wheel
+    export PYTORCH_BUILD_VERSION=${BUILD_VERSION}
+    if [[ "${BUILD_ENVIRONMENT}" == *cuda* ]]; then
+      export TORCH_CUDA_ARCH_LIST="5.2;6.0;6.1;7.0;7.5;8.0;8.6"
+    fi
+    aws s3 cp "s3://ossci-linux/${FILENAME}" . --quiet
+    python setup.py bdist_wheel --dist-dir $PWD/dist
+    """
+
+    def test_an_ordinary_multiline_build_script_is_silent(self) -> None:
+        analysis = analyse_script(self.REAL_CI_STEP)
+        assert analysis.score == 0.0, [d.description for d in analysis.detections]
+
+    def test_high_entropy_alone_does_not_produce_a_finding(self) -> None:
+        varied = "\n".join(
+            f"export VAR_{i}=/usr/local/lib/python3.12/site-packages/pkg{i}-{i}.dist-info"
+            for i in range(12)
+        )
+        assert shannon_entropy(varied) > 4.0
+        assert Behaviour.OBFUSCATION not in analyse_script(varied).behaviours
+
+    def test_an_embedded_blob_is_still_detected(self) -> None:
+        import base64
+
+        payload = base64.b64encode(b"malicious-payload" * 20).decode()
+        analysis = analyse_script(f"echo {payload} | base64 -d > /tmp/x")
+        assert Behaviour.OBFUSCATION in analysis.behaviours
+        assert analysis.score > 0.6
