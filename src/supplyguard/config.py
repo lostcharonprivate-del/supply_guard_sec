@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Annotated
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -18,7 +19,14 @@ class Settings(BaseSettings):
     environment: str = Field(default="development")
     debug: bool = False
     api_prefix: str = "/api/v1"
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    #: A comma-separated string in the environment (`ORIGIN_A,ORIGIN_B`), not JSON.
+    #: `NoDecode` stops pydantic-settings from trying to `json.loads` the raw
+    #: value first — without it, a real .env value like
+    #: `http://localhost:5173,http://localhost:8000` fails to parse and the app
+    #: never starts, since that string isn't valid JSON.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: ["http://localhost:5173"]
+    )
 
     # -- storage ------------------------------------------------------------
     database_url: str = Field(
