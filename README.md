@@ -118,12 +118,22 @@ uv sync --extra dev                           # or: uv venv && uv pip install -e
 uv run pytest                                 # 247 tests, offline and deterministic
 uv run pytest -m network                      # the live-API tests, opt-in
 
-uv run supplyguard serve                      # API on :8000 (SQLite, no Redis needed)
+cp .env.example .env                          # then set DATABASE_URL, see below
+uv run supplyguard serve                      # API on :8000
 cd frontend && npm ci && npm run dev          # dashboard on :5173, proxying to :8000
 ```
 
-`supplyguard serve` needs no Postgres and no Redis: it falls back to SQLite and to
-running scans in-process. That is the fastest way to see the thing work.
+`supplyguard serve` needs no Redis: `REDIS_URL` unset or unreachable, and the app
+falls back to an in-memory cache and running scans in-process automatically. Postgres
+is not optional the same way — there is no automatic fallback, so point `DATABASE_URL`
+at SQLite yourself for a database-free local run:
+
+```
+DATABASE_URL=sqlite+aiosqlite:///./dev.db
+```
+
+`create_all()` runs at startup, so the file and schema are created on first boot. That
+combination — SQLite plus no Redis — is the fastest way to see the thing work.
 
 ---
 
