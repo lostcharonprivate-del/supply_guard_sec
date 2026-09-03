@@ -23,3 +23,19 @@ updates:
       interval: weekly
     commit-message:
       prefix: deps(frontend)
+    # Peer-coupled packages have to move together or not at all. Ungrouped,
+    # Dependabot opened one PR raising vite to 8 (which plugin-react 4 refuses
+    # as a peer) and another raising plugin-react to 6 (which demands vite 8) —
+    # each PR blocked by the change sitting in the other, so both failed `npm
+    # ci` forever. Grouping makes that one PR that resolves.
+    groups:
+      vite:
+        patterns:
+          - vite
+          - "@vitejs/*"
+      react:
+        patterns:
+          - react
+          - react-dom
+          - "@types/react"
+          - "@types/react-dom"
